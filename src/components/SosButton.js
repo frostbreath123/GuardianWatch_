@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from "@headlessui/react";
-import { ExclamationTriangleIcon, ShieldExclamationIcon } from "@heroicons/react/24/solid";
+import { ExclamationTriangleIcon, ShieldExclamationIcon, CheckIcon } from "@heroicons/react/24/solid";
 import { getContacts, getSettings, addHistoryEntry } from "@/lib/storage";
 import { useToast } from "./ToastProvider";
 
@@ -66,9 +66,11 @@ export function useAlarm() {
 
 export default function SosButton({ variant = "sos", label = "SOS", triggerAt }) {
   const [open, setOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
-  const [phase, setPhase] = useState("countdown"); // countdown | sending | alarm
+  const [phase, setPhase] = useState("email-input"); // email-input | countdown | sending | alarm
   const [result, setResult] = useState(null);
+  const [copied, setCopied] = useState(false);
   const alarm = useAlarm();
   const { showToast } = useToast();
   const timerRef = useRef(null);
@@ -79,7 +81,8 @@ export default function SosButton({ variant = "sos", label = "SOS", triggerAt })
 
   function trigger() {
     setOpen(true);
-    setPhase("countdown");
+    setPhase("email-input");
+    setRecipientEmail("");
     setCountdown(COUNTDOWN_SECONDS);
   }
 
@@ -94,48 +97,55 @@ export default function SosButton({ variant = "sos", label = "SOS", triggerAt })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, phase, countdown]);
 
+  function proceedWithEmail() {
+    if (!recipientEmail.trim()) {
+      showToast("Please enter a recipient email.", "error");
+      return;
+    }
+    setPhase("countdown");
+    setCountdown(COUNTDOWN_SECONDS);
+  }
+
   async function dispatchAlert() {
     setPhase("sending");
     const settings = getSettings();
-    const contacts = getContacts();
     const location = await getLocation();
+    const alertMessage =
+      variant === "fall"
+        ? "A fall was detected by the SafeBand wearable."
+        : "An SOS alert was triggered from the SafeBand dashboard.";
 
-    let payload = { ok: false, simulated: true };
-    try {
-      const res = await fetch("/api/sos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contacts,
-          location,
-          message:
-            variant === "fall"
-              ? "A fall was detected by the SafeBand wearable."
-              : "An SOS alert was triggered from the SafeBand dashboard.",
-          type: variant,
-        }),
-      });
-      payload = await res.json();
-    } catch {
-      payload = { ok: false, simulated: true, error: true };
-    }
+    const alertContent = `
+SafeBand ${variant.toUpperCase()} Alert
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Message: ${alertMessage}
+Recipient: ${recipientEmail}
+Timestamp: ${new Date().toLocaleString()}
+${location ? `Location: https://maps.google.com/?q=${location.lat},${location.lng}` : "Location: Not available"}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`.trim();
 
-    const status = !payload.ok ? "failed" : payload.simulated ? "simulated" : "sent";
-    setResult({ status, sentTo: payload.sentTo, failed: payload.failed });
+    setResult({ status: "ready", content: alertContent, location });
 
     addHistoryEntry({
       type: variant,
-      status,
+      status: "recorded",
       location,
       message: variant === "fall" ? "Fall detected" : "SOS alert",
     });
 
     if (settings.alarmSound) alarm.start();
     setPhase("alarm");
+    showToast("Alert recorded. Copy to clipboard or share manually.", "info");
+  }
 
-    if (status === "sent") showToast(`Alert sent to ${payload.sentTo.length} contact(s).`, "success");
-    else if (status === "simulated") showToast("Alert simulated — email not configured.", "info");
-    else showToast("Alert failed to send.", "error");
+  function copyToClipboard() {
+    if (result?.content) {
+      navigator.clipboard.writeText(result.content);
+      setCopied(true);
+      showToast("Alert copied to clipboard!", "success");
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   function cancel() {
@@ -178,7 +188,7 @@ export default function SosButton({ variant = "sos", label = "SOS", triggerAt })
       </button>
 
       <Transition show={open}>
-        <Dialog onClose={phase === "countdown" ? cancel : () => {}} className="relative z-50">
+        <Dialog onClose={phase === "email-input" || phase === "countdown" ? cancel : () => {}} className="relative z-50">
           <TransitionChild
             enter="ease-out duration-150"
             enterFrom="opacity-0"
@@ -199,13 +209,45 @@ export default function SosButton({ variant = "sos", label = "SOS", triggerAt })
               leaveTo="opacity-0 scale-95"
             >
               <DialogPanel className="w-full max-w-sm rounded-2xl bg-[var(--bg-elevated)] p-6 text-center shadow-2xl">
+                {phase === "email-input" && (
+                  <>
+                    <DialogTitle className="text-lg font-bold text-brand-600">
+                      Who should receive this alert?
+                    </DialogTitle>
+                    <p className="mt-2 text-sm text-[var(--fg-muted)]">
+                      Enter the email address to send this {variant === "fall" ? "fall" : "SOS"} alert to.
+                    </p>
+                    <input
+                      type="email"
+                      placeholder="recipient@example.com"
+                      value={recipientEmail}
+                      onChange={(e) => setRecipientEmail(e.target.value)}
+                      className="mt-4 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:bg-neutral-800"
+                    />
+                    <div className="mt-6 flex gap-3">
+                      <button
+                        onClick={cancel}
+                        className="flex-1 rounded-lg border border-[var(--border)] py-2.5 text-sm font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={proceedWithEmail}
+                        className="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+                      >
+                        Proceed
+                      </button>
+                    </div>
+                  </>
+                )}
+
                 {phase === "countdown" && (
                   <>
                     <DialogTitle className="text-lg font-bold text-brand-600">
                       Sending {variant === "fall" ? "fall alert" : "SOS"} in {countdown}s
                     </DialogTitle>
                     <p className="mt-2 text-sm text-[var(--fg-muted)]">
-                      Your emergency contacts will be notified with your location.
+                      Alert will be sent to {recipientEmail}
                     </p>
                     <div className="mx-auto mt-6 flex h-20 w-20 items-center justify-center rounded-full border-4 border-brand-500 text-2xl font-bold text-brand-600">
                       {countdown}
@@ -221,31 +263,46 @@ export default function SosButton({ variant = "sos", label = "SOS", triggerAt })
 
                 {phase === "sending" && (
                   <>
-                    <DialogTitle className="text-lg font-bold text-brand-600">Sending alert…</DialogTitle>
-                    <p className="mt-2 text-sm text-[var(--fg-muted)]">Locating you and notifying contacts.</p>
+                    <DialogTitle className="text-lg font-bold text-brand-600">Preparing alert…</DialogTitle>
+                    <p className="mt-2 text-sm text-[var(--fg-muted)]">Capturing location and preparing alert.</p>
                   </>
                 )}
 
                 {phase === "alarm" && (
                   <>
                     <DialogTitle className="text-lg font-bold text-brand-600">
-                      {result?.status === "sent" && "Alert sent"}
-                      {result?.status === "simulated" && "Alert simulated"}
-                      {result?.status === "failed" && "Alert failed"}
+                      Alert Ready — Copy &amp; Send
                     </DialogTitle>
                     <p className="mt-2 text-sm text-[var(--fg-muted)]">
-                      {result?.status === "sent" &&
-                        `Notified ${result.sentTo?.length ?? 0} contact(s). Alarm is sounding.`}
-                      {result?.status === "simulated" &&
-                        "Email isn't configured, so this was simulated locally."}
-                      {result?.status === "failed" && "Something went wrong sending the alert."}
+                      Your alert has been prepared and recorded in history. Copy the text below and send it manually or via your preferred method.
                     </p>
-                    <button
-                      onClick={dismiss}
-                      className="mt-6 w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
-                    >
-                      Dismiss — I&apos;m Safe
-                    </button>
+                    <pre className="mt-4 max-h-48 overflow-auto rounded-lg bg-neutral-100 p-3 text-left text-xs dark:bg-neutral-800">
+                      {result?.content}
+                    </pre>
+                    <div className="mt-6 flex gap-3">
+                      <button
+                        onClick={copyToClipboard}
+                        className={`flex-1 rounded-lg py-2.5 text-sm font-semibold text-white transition-colors ${
+                          copied
+                            ? "bg-green-600 hover:bg-green-700"
+                            : "bg-brand-600 hover:bg-brand-700"
+                        }`}
+                      >
+                        {copied ? (
+                          <>
+                            <CheckIcon className="mb-0.5 inline h-4 w-4" /> Copied!
+                          </>
+                        ) : (
+                          "Copy to Clipboard"
+                        )}
+                      </button>
+                      <button
+                        onClick={dismiss}
+                        className="flex-1 rounded-lg border border-[var(--border)] py-2.5 text-sm font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </>
                 )}
               </DialogPanel>
