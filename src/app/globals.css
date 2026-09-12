@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #fff1f3;
+  --color-brand-100: #ffe0e6;
+  --color-brand-200: #ffc2cf;
+  --color-brand-300: #ff96ac;
+  --color-brand-400: #fb5b7f;
+  --color-brand-500: #f22a5a;
+  --color-brand-600: #de1249;
+  --color-brand-700: #b90a3d;
+  --color-brand-800: #970c39;
+  --color-brand-900: #810e35;
+  --color-brand-950: #480319;
+
+  --color-neutral-50: #f8f8f9;
+  --color-neutral-100: #eef0f2;
+  --color-neutral-200: #dde1e6;
+  --color-neutral-300: #c3c9d1;
+  --color-neutral-400: #9aa3af;
+  --color-neutral-500: #747f8d;
+  --color-neutral-600: #5a6472;
+  --color-neutral-700: #48505c;
+  --color-neutral-800: #2e343d;
+  --color-neutral-900: #1c1f25;
+  --color-neutral-950: #101216;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --animate-pulse-glow: pulse-glow 2.2s ease-in-out infinite;
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(242, 42, 90, 0.55), 0 0 0 0 rgba(242, 42, 90, 0.3);
+    }
+    70% {
+      box-shadow: 0 0 0 18px rgba(242, 42, 90, 0), 0 0 0 34px rgba(242, 42, 90, 0);
+    }
+  }
+}
+
+:root {
+  --bg: #f8f8f9;
+  --bg-elevated: #ffffff;
+  --fg: #1c1f25;
+  --fg-muted: #5a6472;
+  --border: #dde1e6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg: #101216;
+    --bg-elevated: #1c1f25;
+    --fg: #f2f3f5;
+    --fg-muted: #9aa3af;
+    --border: #2e343d;
+  }
+}
+
+:root.dark {
+  --bg: #101216;
+  --bg-elevated: #1c1f25;
+  --fg: #f2f3f5;
+  --fg-muted: #9aa3af;
+  --border: #2e343d;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-300);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-700);
+  background-clip: content-box;
+}
+
+.animate-pulse-glow {
+  animation: var(--animate-pulse-glow);
+}
